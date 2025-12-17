@@ -1,0 +1,527 @@
+// 잇츠Run Database Schema
+// Prisma ORM for PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum SocialProvider {
+  KAKAO
+  NAVER
+}
+
+enum UserType {
+  RUNNER
+  VISITOR
+  PARTICIPANT
+}
+
+enum EventType {
+  RUNNING
+  FESTIVAL
+  SINGLE
+}
+
+enum EventStatus {
+  UPCOMING
+  ACTIVE
+  ENDED
+}
+
+enum PostCategory {
+  TOURIST
+  BOOTH
+  PERFORMANCE
+  RESTAURANT
+  CAFE
+  ACCOMMODATION
+  OTHER
+}
+
+enum MerchantCategory {
+  RESTAURANT
+  CAFE
+  PERFORMANCE
+  ACCOMMODATION
+  OTHER
+}
+
+enum MerchantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum MerchantUserRole {
+  OWNER
+  STAFF
+}
+
+enum CouponType {
+  DISCOUNT_5000
+  DISCOUNT_10000
+  FREE_DRINK
+  ONE_PLUS_ONE
+  PERCENT_50
+  CUSTOM
+}
+
+enum CouponStatus {
+  ACTIVE
+  USED
+  EXPIRED
+}
+
+enum RewardTier {
+  TIER_1
+  TIER_3
+  TIER_5
+  TIER_10
+}
+
+enum RewardStatus {
+  AVAILABLE
+  REDEEMED
+  EXPIRED
+}
+
+enum GameType {
+  LADDER
+  ROULETTE
+  CAPSULE
+  CARD
+  SLOT
+}
+
+enum SettlementStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum NotificationType {
+  EVENT_REMINDER
+  COUPON_ACQUIRED
+  COUPON_EXPIRING
+  STAMP_ACHIEVED
+  FINISH_REWARD
+  NEARBY_POST
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  OPERATOR
+}
+
+// ==================== MODELS ====================
+
+// 사용자 (참여자)
+model User {
+  id             String         @id @default(uuid())
+  socialId       String
+  socialProvider SocialProvider
+  name           String?
+  phone          String?
+  isVerified     Boolean        @default(false)
+  fcmToken       String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relations
+  userEvents    UserEvent[]
+  coupons       Coupon[]
+  stamps        Stamp[]
+  rewards       Reward[]
+  postVisits    PostVisit[]
+  gameLogs      GameLog[]
+  notifications PushNotification[]
+
+  @@unique([socialProvider, socialId])
+  @@index([phone])
+  @@map("users")
+}
+
+// 행사
+model Event {
+  id              String      @id @default(uuid())
+  name            String
+  type            EventType
+  region          String
+  description     String?
+  imageUrl        String?
+  startDate       DateTime    @db.Date
+  endDate         DateTime    @db.Date
+  couponStartTime String      @default("00:00")
+  couponEndTime   String      @default("20:00")
+  status          EventStatus @default(UPCOMING)
+  settings        Json?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  userEvents      UserEvent[]
+  posts           Post[]
+  eventMerchants  EventMerchant[]
+  couponTemplates CouponTemplate[]
+  rewardTemplates RewardTemplate[]
+  coupons         Coupon[]
+  stamps          Stamp[]
+  rewards         Reward[]
+  settlements     Settlement[]
+  gameLogs        GameLog[]
+  notifications   PushNotification[]
+
+  @@index([status, startDate])
+  @@map("events")
+}
+
+// 사용자-행사 참여
+model UserEvent {
+  id               String    @id @default(uuid())
+  userId           String
+  eventId          String
+  userType         UserType
+  isRunnerVerified Boolean   @default(false)
+  isFinished       Boolean   @default(false)
+  finishCode       String?
+  finishedAt       DateTime?
+  joinedAt         DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@index([userId, eventId])
+  @@map("user_events")
+}
+
+// 포스트 (QR 체크인 장소)
+model Post {
+  id             String       @id @default(uuid())
+  eventId        String
+  merchantId     String?
+  name           String
+  category       PostCategory
+  description    String?
+  imageUrl       String?
+  address        String
+  latitude       Decimal      @db.Decimal(10, 7)
+  longitude      Decimal      @db.Decimal(10, 7)
+  qrCode         String       @unique @default(uuid())
+  isRewardPost   Boolean      @default(false)
+  operatingHours Json?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // Relations
+  event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  merchant   Merchant?   @relation(fields: [merchantId], references: [id])
+  postVisits PostVisit[]
+  stamps     Stamp[]
+  rewards    Reward[]    @relation("RedeemPost")
+
+  @@index([eventId, isActive])
+  @@map("posts")
+}
+
+// 포스트 방문 기록
+model PostVisit {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  eventId   String
+  visitedAt DateTime @default(now())
+  latitude  Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post     Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  gameLogs GameLog[]
+
+  @@index([userId, eventId])
+  @@map("post_visits")
+}
+
+// 상점
+model Merchant {
+  id             String         @id @default(uuid())
+  name           String
+  category       MerchantCategory
+  description    String?
+  imageUrl       String?
+  address        String
+  latitude       Decimal        @db.Decimal(10, 7)
+  longitude      Decimal        @db.Decimal(10, 7)
+  phone          String
+  businessNumber String
+  bankName       String?
+  bankAccount    String?
+  bankHolder     String?
+  status         MerchantStatus @default(PENDING)
+  isPostMerchant Boolean        @default(false)
+  approvedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relations
+  merchantUsers  MerchantUser[]
+  eventMerchants EventMerchant[]
+  posts          Post[]
+  coupons        Coupon[]
+  settlements    Settlement[]
+
+  @@index([status, category])
+  @@map("merchants")
+}
+
+// 상점 관리자 계정
+model MerchantUser {
+  id           String           @id @default(uuid())
+  merchantId   String
+  email        String           @unique
+  passwordHash String
+  name         String
+  phone        String
+  role         MerchantUserRole @default(OWNER)
+  fcmToken     String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  // Relations
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@map("merchant_users")
+}
+
+// 행사-상점 연결
+model EventMerchant {
+  id             String  @id @default(uuid())
+  eventId        String
+  merchantId     String
+  isPostMerchant Boolean @default(false)
+  commissionRate Decimal @default(5.00) @db.Decimal(4, 2)
+  isActive       Boolean @default(true)
+  createdAt      DateTime @default(now())
+
+  // Relations
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, merchantId])
+  @@map("event_merchants")
+}
+
+// 쿠폰 템플릿
+model CouponTemplate {
+  id             String           @id @default(uuid())
+  eventId        String
+  name           String
+  category       MerchantCategory
+  type           CouponType
+  discountAmount Int
+  description    String?
+  maxIssueCount  Int?
+  issuedCount    Int              @default(0)
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Relations
+  event   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  coupons Coupon[]
+
+  @@map("coupon_templates")
+}
+
+// 발급된 쿠폰
+model Coupon {
+  id             String           @id @default(uuid())
+  userId         String
+  eventId        String
+  templateId     String
+  merchantId     String?          // 사용한 상점
+  category       MerchantCategory
+  type           CouponType
+  discountAmount Int
+  qrCode         String           @unique @default(uuid())
+  status         CouponStatus     @default(ACTIVE)
+  validFrom      DateTime
+  validUntil     DateTime
+  usedAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  // Relations
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event    Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  template CouponTemplate @relation(fields: [templateId], references: [id])
+  merchant Merchant?      @relation(fields: [merchantId], references: [id])
+  gameLogs GameLog[]
+
+  @@index([userId, status])
+  @@index([qrCode])
+  @@map("coupons")
+}
+
+// 스탬프
+model Stamp {
+  id          String   @id @default(uuid())
+  userId      String
+  eventId     String
+  postId      String
+  collectedAt DateTime @default(now())
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  post  Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId, postId])
+  @@index([userId, eventId])
+  @@map("stamps")
+}
+
+// 교환권 템플릿
+model RewardTemplate {
+  id                String     @id @default(uuid())
+  eventId           String
+  name              String
+  tier              RewardTier
+  requiredStamps    Int
+  description       String?
+  imageUrl          String?
+  totalQuantity     Int
+  remainingQuantity Int
+  isActive          Boolean    @default(true)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  // Relations
+  event   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rewards Reward[]
+
+  @@map("reward_templates")
+}
+
+// 발급된 교환권
+model Reward {
+  id           String       @id @default(uuid())
+  userId       String
+  eventId      String
+  templateId   String
+  redeemPostId String?
+  tier         RewardTier
+  qrCode       String       @unique @default(uuid())
+  status       RewardStatus @default(AVAILABLE)
+  redeemedAt   DateTime?
+  createdAt    DateTime     @default(now())
+
+  // Relations
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event      Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  template   RewardTemplate @relation(fields: [templateId], references: [id])
+  redeemPost Post?          @relation("RedeemPost", fields: [redeemPostId], references: [id])
+
+  @@index([userId, eventId])
+  @@map("rewards")
+}
+
+// 게임 로그
+model GameLog {
+  id             String           @id @default(uuid())
+  userId         String
+  eventId        String
+  postVisitId    String
+  gameType       GameType
+  resultCategory MerchantCategory
+  couponId       String
+  playedAt       DateTime         @default(now())
+
+  // Relations
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  postVisit PostVisit @relation(fields: [postVisitId], references: [id])
+  coupon    Coupon    @relation(fields: [couponId], references: [id])
+
+  @@map("game_logs")
+}
+
+// 정산
+model Settlement {
+  id                  String           @id @default(uuid())
+  merchantId          String
+  eventId             String
+  periodStart         DateTime         @db.Date
+  periodEnd           DateTime         @db.Date
+  totalCoupons        Int
+  totalDiscountAmount Int
+  commissionAmount    Int              @default(0)
+  settlementAmount    Int
+  status              SettlementStatus @default(PENDING)
+  completedAt         DateTime?
+  transactionId       String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  // Relations
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId, eventId])
+  @@map("settlements")
+}
+
+// 푸시 알림
+model PushNotification {
+  id          String             @id @default(uuid())
+  userId      String?
+  eventId     String?
+  title       String
+  body        String
+  type        NotificationType
+  data        Json?
+  status      NotificationStatus @default(PENDING)
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  createdAt   DateTime           @default(now())
+
+  // Relations
+  user  User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("push_notifications")
+}
+
+// 관리자
+model AdminUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         AdminRole @default(OPERATOR)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("admin_users")
+}
