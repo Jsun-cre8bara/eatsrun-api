@@ -37,6 +37,17 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Root
+app.get('/', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    message: 'eatsrun api is running',
+    env: process.env.NODE_ENV || 'development',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Health check
 app.get('/health', (req: Request, res: Response) => {
   res.json({ 
