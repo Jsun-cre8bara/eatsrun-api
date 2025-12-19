@@ -2,6 +2,20 @@
 
 잇츠Run 지역 소비 촉진 플랫폼 백엔드 API 서버
 
+> **관련 프로젝트**  
+> 프론트엔드 앱: [eatsrun-app](https://github.com/Jsun-cre8bara/eatsrun-app)
+
+## 프로젝트 개요
+
+러닝대회, 축제 등 지역 이벤트 참여자들이 해당 지역에서 소비하도록 유도하는 플랫폼의 백엔드 API입니다.
+
+- 소셜 로그인 (카카오/네이버) 및 JWT 인증
+- 행사 참여 및 완주 인증
+- 포스트 방문 (QR 스캔)
+- 게임을 통한 쿠폰 획득 및 사용
+- 스탬프 수집 및 교환권 시스템
+- 상점주 및 어드민 관리
+
 ## 기술 스택
 
 - **Runtime**: Node.js 18+
@@ -21,9 +35,21 @@ npm install
 
 ### 2. 환경변수 설정
 
-```bash
-cp .env.example .env
-# .env 파일을 편집하여 실제 값 입력
+`.env` 파일을 생성하고 다음 환경변수를 설정합니다:
+
+```env
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5432/eatsrun?schema=public"
+
+# JWT
+JWT_SECRET="your-super-secret-jwt-key-change-in-production"
+JWT_EXPIRES_IN="1h"
+JWT_REFRESH_SECRET="your-refresh-secret-key-change-in-production"
+JWT_REFRESH_EXPIRES_IN="14d"
+
+# Server
+PORT=3000
+NODE_ENV=development
 ```
 
 ### 3. 데이터베이스 설정
@@ -35,8 +61,8 @@ npm run db:generate
 # 데이터베이스 마이그레이션
 npm run db:push
 
-# 시드 데이터 삽입
-npx ts-node prisma/seed.ts
+# 시드 데이터 삽입 (선택사항)
+npm run db:seed
 ```
 
 ### 4. 개발 서버 실행
@@ -145,6 +171,30 @@ eatsrun-api/
 ├── tsconfig.json
 └── README.md
 ```
+
+## 개발 도구
+
+### Prisma Studio
+데이터베이스를 시각적으로 관리할 수 있습니다:
+```bash
+npm run db:studio
+```
+
+### Health Check
+서버 상태 확인:
+```bash
+curl http://localhost:3000/health
+```
+
+## 배포
+
+자세한 배포 가이드는 `DEPLOY.md` 파일을 참고하세요.
+
+## 관련 문서
+
+- `SETUP.md` - 초기 설정 가이드
+- `DEPLOY.md` - 배포 가이드
+- `SETUP_CHECKLIST.md` - 설정 체크리스트
 
 ## 라이선스
 
