@@ -55,3 +55,6 @@ coverage/
 secrets.json
 credentials.json
 service-account.json
+
+# Avoid nested frontend repo
+eatsrun-app/
